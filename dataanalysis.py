@@ -21,7 +21,7 @@ def find_ranges(df, column, eps, value_column):
 
     # Iterate over each value in the column
     for i, value in enumerate(df[column]):
-        if value > eps:
+        if value >= eps:
             if start_range is None:
                 # Start a new range
                 start_range = df[value_column].iloc[i]
@@ -88,7 +88,7 @@ processedData = processedData.drop(columns=['time'])
 # </editor-fold>
 
 
-# <editor-fold desc="Use the processed CSV file to calculate MGMDT and Storm intensity">
+# <editor-fold desc="Use the processed CSV file to calculate MGMDT, Storm intensity, and TTGMD">
 #
 threshold = 5
 stormRanges = find_ranges(processedData, 'Kp', threshold, 'DATETIME')
@@ -107,7 +107,15 @@ result_df['MGMDT'] = result_df['End Range'] - result_df['Start Range']
 # convert the time delta to integer hours and add 3 hours to include one of the end ranges
 result_df['MGMDT'] = result_df['MGMDT'].astype('timedelta64[s]').astype('int64') / 3600 + 3
 
-result_df.to_csv('stormlengths.csv', index=False)
+# TTGMD calculation
+TTGMD = []
+for i in range(len(result_df) - 1):
+    diff = result_df.loc[i + 1, 'Start Range'] - result_df.loc[i, 'End Range']
+    TTGMD.append(diff)
+TTGMD = pd.DataFrame({'TTGMD': TTGMD})
+TTGMD = TTGMD.astype('timedelta64[s]').astype('int64') / 3600
 # </editor-fold>
 
-k = 1
+# export results to corresponding csv files
+TTGMD.to_csv('TTGMD.csv', index=False)
+result_df.to_csv('stormlengths.csv', index=False)
