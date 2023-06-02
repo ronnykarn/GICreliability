@@ -2,10 +2,11 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import datetime as dt
+from datetime import timedelta
 
 
 # <editor-fold desc="Functions for the script">
-def find_ranges(df, column, eps, value_column):
+def find_event_ranges(df, column, eps, value_column):
     """
 
     :param df: input dataframe
@@ -40,6 +41,26 @@ def find_ranges(df, column, eps, value_column):
         ranges.append((start_range, end_range))
 
     return ranges
+
+
+def merge_ranges(df, cooldown):
+    merged_ranges = []
+    start_range = df.iloc[0]['Start Range']
+    end_range = df.iloc[0]['End Range']
+    max_value = df.iloc[0]['Max Value']
+
+    for i in range(1, len(df)):
+        if df.iloc[i]['Start Range'] - end_range <= timedelta(days=cooldown):
+            end_range = max(end_range, df.iloc[i]['End Range'])
+            max_value = max(max_value, df.iloc[i]['Max Value'])
+        else:
+            merged_ranges.append({'Start Range': start_range, 'End Range': end_range, 'Max Value': max_value})
+            start_range = df.iloc[i]['Start Range']
+            end_range = df.iloc[i]['End Range']
+            max_value = df.iloc[i]['Max Value']
+
+    merged_ranges.append({'Start Range': start_range, 'End Range': end_range, 'Max Value': max_value})
+    return pd.DataFrame(merged_ranges)
 
 
 # function to convert HHMM to datetime.time
@@ -91,26 +112,33 @@ processedData = processedData.drop(columns=['time'])
 # <editor-fold desc="Use the processed CSV file to calculate MGMDT, Storm intensity, and TTGMD">
 #
 threshold = 5
-stormRanges = find_ranges(processedData, 'Kp', threshold, 'DATETIME')
+eventRanges = find_event_ranges(processedData, 'Kp', threshold, 'DATETIME')
 result = []
-for start, end in stormRanges:
+for start, end in eventRanges:
     max_value = processedData.loc[(processedData['DATETIME'] >= start) & (processedData['DATETIME'] <= end), 'Kp'].max()
     result.append({'Start Range': start, 'End Range': end, 'Max Value': max_value})
 result_df = pd.DataFrame(result)
 
+# Merge events to recognize storms where there is activity within 1.5 days
+stormRanges = merge_ranges(result_df, cooldown=1.5)
+
 # Categorize the storms based of Max Kp value
-result_df['category'] = result_df['Max Value'].apply(assign_storm_category)
+stormRanges['category'] = stormRanges['Max Value'].apply(assign_storm_category)
 
 # time delta between two time ranges
-result_df['MGMDT'] = result_df['End Range'] - result_df['Start Range']
+stormRanges['MGMDT'] = stormRanges['End Range'] - stormRanges['Start Range']
 
 # convert the time delta to integer hours and add 3 hours to include one of the end ranges
-result_df['MGMDT'] = result_df['MGMDT'].astype('timedelta64[s]').astype('int64') / 3600 + 3
+stormRanges['MGMDT'] = stormRanges['MGMDT'].astype('timedelta64[s]').astype('int64') / 3600 + 3
+
+# drop G1 events with Max value = 5
+mask = (stormRanges['Max Value'] == 5) & (stormRanges['MGMDT'] == 3)
+stormRanges = stormRanges.drop(stormRanges[mask].index).reset_index(drop=True)
 
 # TTGMD calculation
 TTGMD = []
-for i in range(len(result_df) - 1):
-    diff = result_df.loc[i + 1, 'Start Range'] - result_df.loc[i, 'End Range']
+for i in range(len(stormRanges) - 1):
+    diff = stormRanges.loc[i + 1, 'Start Range'] - stormRanges.loc[i, 'End Range']
     TTGMD.append(diff)
 TTGMD = pd.DataFrame({'TTGMD': TTGMD})
 TTGMD = TTGMD.astype('timedelta64[s]').astype('int64') / 3600
@@ -118,4 +146,6 @@ TTGMD = TTGMD.astype('timedelta64[s]').astype('int64') / 3600
 
 # export results to corresponding csv files
 TTGMD.to_csv('TTGMD.csv', index=False)
-result_df.to_csv('stormlengths.csv', index=False)
+stormRanges.to_csv('stormlengths.csv', index=False)
+
+k=1
