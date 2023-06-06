@@ -10,7 +10,7 @@ plt.xlabel('TTGMD(hours)')
 plt.savefig('plots\\TTGMD.png', dpi=300)
 
 TTGMDFit = Fitter(TTGMD['TTGMD'])
-TTGMDFit.fit(get_common_distributions())
+TTGMDFit.fit()
 TTGMDSummary = TTGMDFit.summary(plot=True)
 plt.savefig('plots\\TTGMD_fitted.png', dpi=300)
 TTGMDSummary .to_csv('TTGMD_fitted.csv')

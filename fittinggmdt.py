@@ -6,8 +6,8 @@ from fitter import Fitter, get_common_distributions, get_distributions
 # Read storm data
 stormData = pd.read_csv('stormlengths.csv')
 
-sns.histplot(data=stormData, x="MGMDT", binwidth=3, kde=True)
-plt.xlabel('MGMDT(hours)')
+sns.histplot(data=stormData, x="MGMDT", stat='count', binwidth=3)
+plt.xlabel('GMDT(hours)')
 plt.savefig('plots\\MGMDT.png', dpi=300)
 
 MGMDTFit = Fitter(stormData['MGMDT'])
